@@ -1,8 +1,6 @@
 (function () {
     "use strict";
 
-    const whitelistedDomains = [];
-
     const lightCSS = `
         :root {
             color-scheme: light only !important;
@@ -19,36 +17,43 @@
     }
 
     function applyStyle(domains) {
-        // Only activate the extension when the OS/browser is in dark mode.
         const systemIsDark = window.matchMedia(
             "(prefers-color-scheme: dark)"
         ).matches;
 
-        // Light system theme: never interfere with the page.
+        /*
+         * Light system:
+         * Do nothing. The site behaves normally.
+         */
         if (!systemIsDark) {
             return;
         }
 
-        // Dark system + whitelisted site:
-        // leave Chromium Force Dark alone.
+        /*
+         * Dark system + whitelisted:
+         * Do nothing. Chromium's Force Dark is allowed to work.
+         */
         if (isWhitelisted(domains)) {
             return;
         }
 
-        // Dark system + non-whitelisted site:
-        // prevent Chromium Force Dark from affecting it.
+        /*
+         * Dark system + not whitelisted:
+         * Prevent Chromium Force Dark from darkening the page.
+         */
         const style = document.createElement("style");
-        style.id = "dark-mode-whitelist-style";
+        style.id = "dark-mode-exceptions-style";
         style.textContent = lightCSS;
 
         (document.head || document.documentElement).appendChild(style);
     }
 
     chrome.storage.sync.get(
-        ["whitelistedDomains"],
+        ["excludedDomains"],
         (result) => {
-            const domains = result.whitelistedDomains || whitelistedDomains;
-            applyStyle(domains);
+            const excludedDomains = result.excludedDomains || [];
+
+            applyStyle(excludedDomains);
         }
     );
 })();
