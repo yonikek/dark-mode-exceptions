@@ -7,53 +7,88 @@
         }
     `;
 
-    function isWhitelisted(domains) {
-        const hostname = window.location.hostname;
+    const styleId = "dark-mode-exception-style";
 
-        return domains.some((domain) =>
-            hostname === domain ||
-            hostname.endsWith("." + domain)
-        );
+    function getCurrentDomain() {
+        return window.location.hostname;
     }
 
-    function applyStyle(domains) {
+    function isWhitelisted(domains) {
+        const currentDomain = getCurrentDomain();
+
+        return domains.some((domain) => {
+            return (
+                currentDomain === domain ||
+                currentDomain.endsWith("." + domain)
+            );
+        });
+    }
+
+    function applyException(shouldApply) {
+        let style = document.getElementById(styleId);
+
+        if (shouldApply) {
+            if (!style) {
+                style = document.createElement("style");
+                style.id = styleId;
+                style.textContent = lightCSS;
+
+                (document.head || document.documentElement).appendChild(style);
+            }
+        } else {
+            if (style) {
+                style.remove();
+            }
+        }
+    }
+
+    function update(domains) {
         const systemIsDark = window.matchMedia(
             "(prefers-color-scheme: dark)"
         ).matches;
 
+        const whitelisted = isWhitelisted(domains);
+
         /*
          * Light system:
-         * Do nothing. The site behaves normally.
+         *   Always apply the original light-mode exception.
+         *
+         * Dark system:
+         *   Apply the exception everywhere EXCEPT whitelisted domains.
          */
-        if (!systemIsDark) {
-            return;
-        }
+        const shouldApplyException =
+            !systemIsDark || !whitelisted;
 
-        /*
-         * Dark system + whitelisted:
-         * Do nothing. Chromium's Force Dark is allowed to work.
-         */
-        if (isWhitelisted(domains)) {
-            return;
-        }
-
-        /*
-         * Dark system + not whitelisted:
-         * Prevent Chromium Force Dark from darkening the page.
-         */
-        const style = document.createElement("style");
-        style.id = "dark-mode-exceptions-style";
-        style.textContent = lightCSS;
-
-        (document.head || document.documentElement).appendChild(style);
+        applyException(shouldApplyException);
     }
 
-    chrome.storage.sync.get(
-        ["excludedDomains"],
-        (result) => {
-            const excludedDomains = result.excludedDomains || [];
+    function loadDomains() {
+        chrome.storage.sync.get(
+            ["excludedDomains"],
+            (result) => {
+                const domains = result.excludedDomains || [];
+                update(domains);
+            }
+        );
+    }
 
-            applyStyle(excludedDomains);
-        }
+    // Initial state.
+    loadDomains();
+
+    // React when the system theme changes.
+    const mediaQuery = window.matchMedia(
+        "(prefers-color-scheme: dark)"
     );
+
+    mediaQuery.addEventListener("change", loadDomains);
+
+    // React immediately when the whitelist changes in the popup.
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (
+            areaName === "sync" &&
+            changes.excludedDomains
+        ) {
+            update(changes.excludedDomains.newValue || []);
+        }
+    });
 })();
