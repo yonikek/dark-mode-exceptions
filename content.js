@@ -1,50 +1,54 @@
 (function () {
     "use strict";
 
-    const defaultMode = "dark"; // or "light"
+    const whitelistedDomains = [];
 
-    // Initial excluded domains.
-    const initialExcludedDomains = [];
-
-    // Light mode CSS.
     const lightCSS = `
         :root {
             color-scheme: light only !important;
         }
     `;
 
-    // Dark mode CSS.
-    const darkCSS = `
-        :root {
-            color-scheme: dark only !important;
-        }
-    `;
+    function isWhitelisted(domains) {
+        const hostname = window.location.hostname;
 
-    // Apply style to the current page so.
-    function applyStyle(excludedDomains) {
-        const currentDomain = window.location.hostname;
-        const isExcluded = excludedDomains.some((domain) =>
-            currentDomain.includes(domain)
+        return domains.some((domain) =>
+            hostname === domain ||
+            hostname.endsWith("." + domain)
         );
-
-        if (defaultMode === "dark") {
-            if (isExcluded) {
-                const style = document.createElement("style");
-                style.textContent = lightCSS;
-                document.head.appendChild(style);
-            }
-        } else if (defaultMode === "light") {
-            if (isExcluded) {
-                const style = document.createElement("style");
-                style.textContent = darkCSS;
-                document.head.appendChild(style);
-            }
-        }
     }
 
-    // Load excluded domains from storage and apply style.
-    chrome.storage.sync.get(["excludedDomains"], (result) => {
-        let excludedDomains = result.excludedDomains || initialExcludedDomains;
-        applyStyle(excludedDomains);
-    });
+    function applyStyle(domains) {
+        // Only activate the extension when the OS/browser is in dark mode.
+        const systemIsDark = window.matchMedia(
+            "(prefers-color-scheme: dark)"
+        ).matches;
+
+        // Light system theme: never interfere with the page.
+        if (!systemIsDark) {
+            return;
+        }
+
+        // Dark system + whitelisted site:
+        // leave Chromium Force Dark alone.
+        if (isWhitelisted(domains)) {
+            return;
+        }
+
+        // Dark system + non-whitelisted site:
+        // prevent Chromium Force Dark from affecting it.
+        const style = document.createElement("style");
+        style.id = "dark-mode-whitelist-style";
+        style.textContent = lightCSS;
+
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    chrome.storage.sync.get(
+        ["whitelistedDomains"],
+        (result) => {
+            const domains = result.whitelistedDomains || whitelistedDomains;
+            applyStyle(domains);
+        }
+    );
 })();
